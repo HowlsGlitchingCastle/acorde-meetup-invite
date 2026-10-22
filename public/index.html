@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f8f9fb">
+  <meta name="description" content="아코르데 모임 안내 및 참석자 확인 방명록">
+  <title>아코르데 모임 초대 · 참석 확인</title>
+  <link rel="preload" href="/invitation.webp" as="image" type="image/webp">
+  <link rel="stylesheet" href="/style.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <main class="main">
+    <header class="site-header">
+      <span class="eyebrow"><span class="eyebrow-dot" aria-hidden="true"></span> ACOREDE MEETUP</span>
+      <span class="date-tag">2026년 10월 말 ~ 11월</span>
+    </header>
+
+    <section class="hero" aria-labelledby="hero-title">
+      <div class="hero-copy">
+        <p class="section-label">INVITATION</p>
+        <h1 id="hero-title">오랜만에 모여요.</h1>
+        <p>저녁 식사와 가벼운 술자리. 아래에서 참석 여부를 알려주세요.</p>
+      </div>
+      <figure class="poster-frame">
+        <img src="/invitation.webp" alt="아코르데 모임 초대장. 주말 중 가능한 날에 맞추어 저녁 식사와 가벼운 술자리. 대상: 이 사진을 받으신 분. 일정: 10월 말부터 11월 중 주말. 장소: 동탄 일대 예정. 참석 가능 여부 회신 요청." width="1122" height="1402" fetchpriority="high">
+      </figure>
+    </section>
+
+    <section class="rsvp-card" id="guestbook" aria-labelledby="guestbook-title">
+      <div class="rsvp-head">
+        <div>
+          <p class="section-label">GUESTBOOK</p>
+          <h2 id="guestbook-title">참석 방명록</h2>
+          <p class="rsvp-sub">참석할 예정이라면 이름을 남겨주세요.</p>
+        </div>
+        <div class="count-chip" aria-live="polite"><strong id="count">–</strong><span>명 참석 예정</span></div>
+      </div>
+
+      <form id="attend-form" novalidate>
+        <label for="guest-name">이름 또는 별명</label>
+        <div class="form-row">
+          <input id="guest-name" name="name" type="text" minlength="1" maxlength="20" placeholder="이름을 입력하세요" autocomplete="nickname" aria-describedby="name-hint" required>
+          <button id="register-button" class="primary-button" type="submit">참석 등록</button>
+        </div>
+        <p id="name-hint" class="hint">등록된 이름은 이 링크를 받은 모든 사람이 볼 수 있습니다.</p>
+        <p id="status" class="status" role="status" aria-live="polite"></p>
+      </form>
+
+      <div id="mine" class="mine" hidden>
+        <div><span class="mine-indicator" aria-hidden="true"></span><span id="my-name"></span> 님, 참석 등록 완료</div>
+        <button class="link-button" id="cancel-button" type="button">내 등록 취소</button>
+      </div>
+
+      <div class="list-header">
+        <h3>참석 예정자</h3>
+        <button id="refresh-button" class="refresh-button" type="button" aria-label="목록 새로고침">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.66"/><path d="M20 4v7h-7"/></svg>
+          새로고침
+        </button>
+      </div>
+      <ul id="guest-list" class="guest-list" aria-live="polite" aria-relevant="additions removals">
+        <li class="loading">명단을 불러오는 중입니다.</li>
+      </ul>
+      <p class="list-note">명단은 주기적으로 갱신됩니다. 같은 이름으로 중복 등록할 수 없습니다.</p>
+    </section>
+
+    <footer class="site-footer">ACOREDE · MEETUP 2026</footer>
+  </main>
+</body>
+</html>

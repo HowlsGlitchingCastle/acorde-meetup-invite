@@ -1,0 +1,17 @@
+{
+  "name": "acorede-meetup-guestbook",
+  "private": true,
+  "version": "1.0.0",
+  "description": "아코르데 초대장과 참석자 공유 방명록",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js",
+    "prestart": "node prepare-assets.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "pg": "^8.16.3"
+  }
+}

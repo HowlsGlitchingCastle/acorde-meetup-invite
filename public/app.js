@@ -2,6 +2,7 @@
 const $ = (id) => document.getElementById(id);
 const form = $('attend-form');
 const nameInput = $('guest-name');
+const contactInput = $('guest-contact');
 const status = $('status');
 const list = $('guest-list');
 const count = $('count');
@@ -93,17 +94,20 @@ form.addEventListener('submit', async (event) => {
   event.preventDefault();
   const name = nameInput.value.normalize('NFKC').trim().replace(/\s+/g, ' ');
   if (name.length < 1 || name.length > 20) return message('이름은 1~20자로 입력해주세요.', true);
-  if (!/^[\p{L}\p{N} ._-]+$/u.test(name)) return message('이름에 사용할 수 없는 문자가 있습니다.', true);
+  if (!/^[\p{L}\p{M}]+(?:[ ·'’-][\p{L}\p{M}]+)*$/u.test(name)) return message('별명 대신 이름을 입력해주세요. 숫자와 특수문자는 사용할 수 없습니다.', true);
+  const contact = contactInput.value.trim();
+  if (contact.length > 80 || /[\x00-\x1f\x7f]/.test(contact)) return message('연락처를 80자 이내로 입력해주세요.', true);
   registerButton.disabled = true;
   message('등록 중입니다…');
   const token = uuidToken();
   try {
     const result = await request('/api/attendees', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({name, token})
+      body: JSON.stringify({name, token, contact})
     });
     setMine({id: result.id, token});
     nameInput.value = '';
+    contactInput.value = '';
     await load({silent: true});
     message('참석 등록이 완료되었습니다.');
   } catch (error) {

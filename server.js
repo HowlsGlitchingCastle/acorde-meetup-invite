@@ -20,8 +20,22 @@ function validateName(name) {
   if (typeof name !== 'string') return null;
   const cleaned = name.normalize('NFKC').replace(/\s+/g, ' ').trim();
   if (cleaned.length < 1 || cleaned.length > 20) return null;
-  if (!/^[\p{L}\p{N} ._-]+$/u.test(cleaned)) return null;
+  if (!/^[\p{L}\p{M}]+(?:[ ·'’-][\p{L}\p{M}]+)*$/u.test(cleaned)) return null;
   return cleaned;
+}
+function validateContact(value) {
+  if (value === undefined || value === '') return '';
+  if (typeof value !== 'string') return null;
+  const contact = value.trim();
+  if (contact.length > 80 || /[\x00-\x1f\x7f]/.test(contact)) return null;
+  return contact;
+}
+function adminAuthorized(req) {
+  const password = process.env.ADMIN_PASSWORD;
+  if (!password || password.length < 16) return false;
+  const auth = req.headers.authorization || '';
+  if (!auth.startsWith('Bearer ') || auth.length > 1024) return false;
+  return crypto.timingSafeEqual(Buffer.from(hashToken(password), 'hex'), Buffer.from(hashToken(auth.slice(7)), 'hex'));
 }
 function validToken(token) { return typeof token === 'string' && /^[a-f0-9]{64}$/.test(token); }
 function json(res, code, body) {
@@ -69,7 +83,7 @@ function tooMany(ip) {
   return false;
 }
 async function init() {
-  if (isHosted && !databaseUrl) throw new Error('호스팅 시 DATABASE_URL 환경 변수가 필요합니다. Replit SQL Database를 연결하세요.');
+  if (isHosted && !databaseUrl) throw new Error('호스팅 시 DATABASE_URL 환경 변수가 필요합니다. Render 환경변수를 확인하세요.');
   if (databaseUrl) {
     const { Pool } = require('pg');
     pool = new Pool({connectionString:databaseUrl, max:5, connectionTimeoutMillis:6000});
@@ -80,6 +94,7 @@ async function init() {
       token_hash CHAR(64) NOT NULL,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )`);
+    await pool.query("ALTER TABLE acorede_attendees ADD COLUMN IF NOT EXISTS contact VARCHAR(80) NOT NULL DEFAULT ''");
     console.log('PostgreSQL 준비 완료');
   } else {
     await fs.mkdir(path.dirname(localFile), {recursive:true});
@@ -103,20 +118,20 @@ async function all() {
   }
   return memoryCache.map(({id, name}) => ({id,name}));
 }
-async function register(name, token) {
+async function register(name, token, contact) {
   const nameKey = keyName(name);
   if(pool) {
     try {
-      const result = await pool.query('INSERT INTO acorede_attendees (name, name_key, token_hash) VALUES ($1,$2,$3) RETURNING id::text AS id', [name,nameKey,hashToken(token)]);
+      const result = await pool.query('INSERT INTO acorede_attendees (name, name_key, token_hash, contact) VALUES ($1,$2,$3,$4) RETURNING id::text AS id', [name,nameKey,hashToken(token),contact]);
       return result.rows[0].id;
     } catch (error) {
-      if(error.code === '23505') throw Object.assign(new Error('이미 등록된 이름입니다. 다른 이름이나 별명으로 등록해주세요.'), {status:409});
+      if(error.code === '23505') throw Object.assign(new Error('이미 등록된 이름입니다. 이미 참석 등록되었는지 확인해주세요.'), {status:409});
       throw error;
     }
   }
-  if (memoryCache.some(p => p.nameKey === nameKey)) throw Object.assign(new Error('이미 등록된 이름입니다. 다른 이름이나 별명으로 등록해주세요.'), {status:409});
+  if (memoryCache.some(p => p.nameKey === nameKey)) throw Object.assign(new Error('이미 등록된 이름입니다. 이미 참석 등록되었는지 확인해주세요.'), {status:409});
   const id = crypto.randomUUID();
-  memoryCache.push({id,name,nameKey,tokenHash:hashToken(token)});
+  memoryCache.push({id,name,nameKey,contact,tokenHash:hashToken(token)});
   await persist();
   return id;
 }
@@ -137,6 +152,8 @@ async function staticFile(req, res, pathname) {
     '/': ['index.html','text/html; charset=utf-8'],
     '/index.html': ['index.html','text/html; charset=utf-8'],
     '/style.css': ['style.css','text/css; charset=utf-8'],
+    '/admin': ['admin.html','text/html; charset=utf-8'],
+    '/admin.js': ['admin.js','text/javascript; charset=utf-8'],
     '/app.js': ['app.js','text/javascript; charset=utf-8'],
     '/invitation.webp': ['invitation.webp','image/webp'],
   };
@@ -159,6 +176,14 @@ async function handle(req,res) {
     const parsed = new URL(req.url, 'http://localhost');
     const url = parsed.pathname;
     if(url === '/health' && req.method === 'GET') return json(res,200,{ok:true,db:pool?'postgres':'local'});
+    if (url === '/api/admin/attendees' && req.method === 'GET') {
+      if (tooMany('admin:' + clientAddress(req))) return json(res,429,{message:'요청이 너무 많습니다. 잠시 후 다시 시도해주세요.'});
+      if (!adminAuthorized(req)) return json(res,401,{message:'관리자 비밀번호를 확인해주세요. 관리자 비밀번호는 서버에 16자 이상으로 설정되어야 합니다.'});
+      const attendees = pool
+        ? (await pool.query('SELECT id::text AS id, name, contact FROM acorede_attendees ORDER BY created_at ASC, id ASC LIMIT 250')).rows
+        : memoryCache.map(({id,name,contact}) => ({id,name,contact:contact || ''}));
+      return json(res,200,{attendees});
+    }
     if(url === '/api/attendees') {
       if(req.method === 'GET') return json(res,200,{attendees:await all()});
       if(req.method === 'POST') {
@@ -166,11 +191,13 @@ async function handle(req,res) {
         if(tooMany(clientAddress(req))) return json(res,429,{message:'요청이 너무 많습니다. 잠시 후 다시 시도해주세요.'});
         const body = await readBody(req);
         const name = validateName(body.name);
-        if(!name) return json(res,400,{message:'이름을 1~20자의 한글, 영문 또는 숫자로 입력해주세요.'});
+        const contact = validateContact(body.contact);
+        if (contact === null) return json(res,400,{message:'연락처를 80자 이내로 입력해주세요.'});
+        if(!name) return json(res,400,{message:'별명 대신 이름을 1~20자로 입력해주세요. 숫자와 특수문자는 사용할 수 없습니다.'});
         if(!validToken(body.token)) return json(res,400,{message:'잘못된 인증 정보입니다.'});
         const current = await all();
         if(current.length >= 250) return json(res,403,{message:'등록 가능한 인원을 초과했습니다.'});
-        const id = await register(name,body.token);
+        const id = await register(name,body.token,contact);
         return json(res,201,{id,name});
       }
       return json(res,405,{message:'지원하지 않는 요청입니다.'});
@@ -187,7 +214,7 @@ async function handle(req,res) {
     }
     return staticFile(req,res,url);
   }catch(error) {
-    console.error(error);
+    console.error('요청 처리 실패:', error.code || error.status || 'unknown');
     return json(res,error.status||500,{message:error.status?error.message:'서버 오류가 발생했습니다.'});
   }
 }
